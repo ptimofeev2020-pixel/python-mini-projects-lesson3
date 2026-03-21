@@ -1,5 +1,7 @@
 """Модуль widget — функции для отображения платёжных реквизитов."""
 
+from datetime import datetime
+
 from src.masks import get_mask_account
 from src.masks import get_mask_card_number
 
@@ -40,3 +42,19 @@ def mask_account_card(account_or_card: str) -> str:
         masked = get_mask_card_number(number)
 
     return f"{name} {masked}"
+
+
+def get_date(date_str: str) -> str:
+    """Преобразует дату из формата ISO в формат ДД.ММ.ГГГГ.
+
+    Args:
+        date_str: Строка вида «2024-03-11T02:26:18.671407».
+
+    Returns:
+        Строка вида «11.03.2024».
+
+    Example:
+        >>> get_date("2024-03-11T02:26:18.671407")
+        '11.03.2024'
+    """
+    return datetime.fromisoformat(date_str).strftime("%d.%m.%Y")

@@ -2,6 +2,7 @@
 
 from src.masks import get_mask_account
 from src.masks import get_mask_card_number
+from src.widget import get_date
 from src.widget import mask_account_card
 
 
@@ -66,6 +67,18 @@ def main() -> None:
     ]
     for entry in widget_examples:
         print(f"  {entry}  →  {mask_account_card(entry)}")
+
+    print()
+    print("=" * 40)
+    print("  get_date")
+    print("=" * 40)
+    date_examples = [
+        "2024-03-11T02:26:18.671407",
+        "2025-12-01T15:00:00.000000",
+        "2000-01-09T00:00:00.000000",
+    ]
+    for date_str in date_examples:
+        print(f"  {date_str}  →  {get_date(date_str)}")
 
 
 if __name__ == "__main__":
