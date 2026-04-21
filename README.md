@@ -132,6 +132,41 @@ for card_number in card_number_generator(1, 5):
 # 0000 0000 0000 0005
 ```
 
+### Модуль `decorators`
+
+#### `log(filename=None)`
+Декоратор для автоматического логирования вызовов функций.
+При успехе записывает `<имя_функции> ok`, при ошибке — `<имя_функции> error: <тип>. Inputs: <args>, <kwargs>`.
+
+```python
+from src.decorators import log
+
+@log(filename="mylog.txt")
+def my_function(x, y):
+    return x + y
+
+my_function(1, 2)
+# В файл mylog.txt: "my_function ok"
+
+@log()
+def my_function(x, y):
+    return x + y
+
+my_function(1, 2)
+# В консоль: "my_function ok"
+```
+
+При ошибке:
+
+```python
+@log()
+def my_function(x, y):
+    raise ValueError("oops")
+
+my_function(1, 2)
+# В консоль: "my_function error: ValueError. Inputs: (1, 2), {}"
+```
+
 ## Линтинг
 
 ```bash
@@ -194,7 +229,8 @@ tests/
 ├── test_masks.py        # тесты src/masks.py
 ├── test_widget.py       # тесты src/widget.py
 ├── test_processing.py   # тесты src/processing.py
-└── test_generators.py   # тесты src/generators.py
+├── test_generators.py   # тесты src/generators.py
+└── test_decorators.py   # тесты src/decorators.py
 ```
 
 В тестах используются:
