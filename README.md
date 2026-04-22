@@ -132,6 +132,51 @@ for card_number in card_number_generator(1, 5):
 # 0000 0000 0000 0005
 ```
 
+### Модуль `utils`
+
+#### `read_transactions_json(path)`
+Читает JSON-файл и возвращает список транзакций.
+Если файл не найден, пустой, содержит невалидный JSON или данные не являются списком — возвращает пустой список.
+
+```python
+from src.utils import read_transactions_json
+
+read_transactions_json("data/operations.json")
+# → [{'id': 441945886, 'state': 'EXECUTED', ...}, ...]
+
+read_transactions_json("nonexistent.json")
+# → []
+```
+
+### Модуль `external_api`
+
+#### `convert_to_rub(transaction)`
+Конвертирует сумму транзакции в рубли.
+Если валюта — RUB, возвращает сумму как есть.
+Для USD и EUR обращается к Exchange Rates Data API.
+
+Требуется API-ключ в переменной окружения `EXCHANGE_RATES_API_KEY` (см. `.env.example`).
+
+```python
+from src.external_api import convert_to_rub
+
+txn_rub = {
+    "operationAmount": {
+        "amount": "100.00",
+        "currency": {"code": "RUB"}
+    }
+}
+convert_to_rub(txn_rub)  # → 100.0
+
+txn_usd = {
+    "operationAmount": {
+        "amount": "100.00",
+        "currency": {"code": "USD"}
+    }
+}
+convert_to_rub(txn_usd)  # → текущий курс × 100.0
+```
+
 ### Модуль `decorators`
 
 #### `log(filename=None)`
@@ -225,15 +270,18 @@ poetry run pytest --cov=src --cov-report=html
 ```
 tests/
 ├── __init__.py
-├── conftest.py          # общие фикстуры (sample_operations и т.п.)
-├── test_masks.py        # тесты src/masks.py
-├── test_widget.py       # тесты src/widget.py
-├── test_processing.py   # тесты src/processing.py
-├── test_generators.py   # тесты src/generators.py
-└── test_decorators.py   # тесты src/decorators.py
+├── conftest.py              # общие фикстуры (sample_operations и т.п.)
+├── test_masks.py            # тесты src/masks.py
+├── test_widget.py           # тесты src/widget.py
+├── test_processing.py       # тесты src/processing.py
+├── test_generators.py       # тесты src/generators.py
+├── test_decorators.py       # тесты src/decorators.py
+├── test_utils.py            # тесты src/utils.py
+└── test_external_api.py     # тесты src/external_api.py
 ```
 
 В тестах используются:
 - `@pytest.fixture` — для подготовки входных данных (списки операций, пустые списки, данные с одинаковыми датами);
 - `@pytest.mark.parametrize` — для покрытия разных кейсов без дублирования кода;
+- `unittest.mock.patch` / `MagicMock` — для мокирования внешних зависимостей (API-запросы, файловый ввод);
 - негативные кейсы — проверка, что функции корректно падают с `ValueError` / `KeyError` на некорректных входных данных.
