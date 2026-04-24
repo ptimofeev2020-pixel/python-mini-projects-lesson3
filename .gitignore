@@ -30,11 +30,11 @@ dmypy.json
 # Testing
 .pytest_cache/
 .tox/
-htmlcov/
 .coverage
 .coverage.*
 coverage.xml
 *.cover
+# htmlcov/ — отчёт о покрытии хранится в репозитории (требование задания)
 
 # Linting / formatting
 .ruff_cache/
@@ -49,7 +49,11 @@ coverage.xml
 .DS_Store
 Thumbs.db
 
+# Environment variables
+.env
+
 # Logs & temp files
 *.log
 *.tmp
 *.bak
+htmlcov/
