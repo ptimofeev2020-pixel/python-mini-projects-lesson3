@@ -177,6 +177,30 @@ txn_usd = {
 convert_to_rub(txn_usd)  # → текущий курс × 100.0
 ```
 
+### Модуль `readers`
+
+#### `read_transactions_csv(path)`
+Читает CSV-файл (разделитель `;`) и возвращает список словарей с транзакциями.
+При ошибке чтения возвращает пустой список.
+
+```python
+from src.readers import read_transactions_csv
+
+read_transactions_csv("data/transactions.csv")
+# → [{'id': 650703, 'state': 'EXECUTED', 'amount': 16210, ...}, ...]
+```
+
+#### `read_transactions_xlsx(path)`
+Читает Excel-файл (.xlsx) и возвращает список словарей с транзакциями.
+При ошибке чтения возвращает пустой список.
+
+```python
+from src.readers import read_transactions_xlsx
+
+read_transactions_xlsx("data/transactions_excel.xlsx")
+# → [{'id': 650703, 'state': 'EXECUTED', 'amount': 16210, ...}, ...]
+```
+
 ### Модуль `decorators`
 
 #### `log(filename=None)`
@@ -277,7 +301,8 @@ tests/
 ├── test_generators.py       # тесты src/generators.py
 ├── test_decorators.py       # тесты src/decorators.py
 ├── test_utils.py            # тесты src/utils.py
-└── test_external_api.py     # тесты src/external_api.py
+├── test_external_api.py     # тесты src/external_api.py
+└── test_readers.py          # тесты src/readers.py
 ```
 
 В тестах используются:
