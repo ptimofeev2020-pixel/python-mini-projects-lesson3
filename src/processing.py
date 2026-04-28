@@ -1,10 +1,13 @@
+
 """
 Модуль для обработки банковских операций.
 Содержит функции для фильтрации и сортировки операций по различным критериям.
 """
 
-from typing import List, Dict, Any
 from datetime import datetime
+from typing import Any
+from typing import Dict
+from typing import List
 
 
 def filter_by_state(operations: List[Dict[str, Any]], state: str = "EXECUTED") -> List[Dict[str, Any]]:
@@ -29,13 +32,18 @@ def sort_by_date(operations: List[Dict[str, Any]], descending: bool = True) -> L
     Сортирует список банковских операций по дате (ключ "date").
 
     :param operations: Список операций, где каждая операция представлена словарём.
+                       Ожидается, что значение ключа "date" — строка в формате
+                       "YYYY-MM-DDTHH:MM:SS.ffffff", например "2019-07-03T18:35:29.512364".
     :param descending: Порядок сортировки. True = по убыванию (самые последние даты в начале),
                        False = по возрастанию. По умолчанию True.
     :return: Новый список, отсортированный по ключу "date" в заданном порядке.
     """
-    # Чтобы корректно сортировать по дате, конвертируем строку в datetime
-    # и используем её при сортировке.
-    def get_date(op: Dict[str, Any]) -> datetime:
-        return datetime.fromisoformat(op["date"])
+    # Для совместимости со всеми версиями Python используем strptime с явным
+    # форматом. datetime.fromisoformat() в Python < 3.11 может не распознавать
+    # некоторые ISO-строки, что приводит к ошибкам разбора.
+    date_format = "%Y-%m-%dT%H:%M:%S.%f"
 
-    return sorted(operations, key=get_date, reverse=descending)
+    def _parse_date(op: Dict[str, Any]) -> datetime:
+        return datetime.strptime(op["date"], date_format)
+
+    return sorted(operations, key=_parse_date, reverse=descending)
