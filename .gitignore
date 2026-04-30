@@ -57,3 +57,5 @@ Thumbs.db
 *.tmp
 *.bak
 htmlcov/
+task8_archive/
+task7_archive/

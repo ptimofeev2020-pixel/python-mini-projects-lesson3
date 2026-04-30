@@ -7,6 +7,8 @@ from typing import List
 import pytest
 
 from src.processing import filter_by_state
+from src.processing import process_bank_operations
+from src.processing import process_bank_search
 from src.processing import sort_by_date
 
 
@@ -123,3 +125,114 @@ class TestSortByDate:
         """Список из одного элемента возвращается как есть."""
         single = [{"id": 1, "state": "EXECUTED", "date": "2020-01-01T00:00:00.000000"}]
         assert sort_by_date(single) == single
+
+
+# ---------------------------------------------------------------------------
+# Тесты: process_bank_search
+# ---------------------------------------------------------------------------
+
+
+class TestProcessBankSearch:
+    """Тесты функции process_bank_search."""
+
+    @pytest.fixture
+    def search_data(self) -> List[Dict[str, Any]]:
+        return [
+            {"id": 1, "description": "Перевод организации"},
+            {"id": 2, "description": "Перевод с карты на карту"},
+            {"id": 3, "description": "Открытие вклада"},
+            {"id": 4, "description": "Перевод со счета на счет"},
+        ]
+
+    def test_search_exact_match(self, search_data: List[Dict[str, Any]]) -> None:
+        """Точное совпадение по описанию."""
+        result = process_bank_search(search_data, "Открытие вклада")
+        assert len(result) == 1
+        assert result[0]["id"] == 3
+
+    def test_search_partial_match(self, search_data: List[Dict[str, Any]]) -> None:
+        """Частичное совпадение — ищет подстроку."""
+        result = process_bank_search(search_data, "Перевод")
+        assert len(result) == 3
+
+    def test_search_case_insensitive(self, search_data: List[Dict[str, Any]]) -> None:
+        """Поиск регистронезависимый."""
+        result = process_bank_search(search_data, "перевод")
+        assert len(result) == 3
+
+    def test_search_no_match(self, search_data: List[Dict[str, Any]]) -> None:
+        """Нет совпадений → пустой список."""
+        result = process_bank_search(search_data, "Пополнение")
+        assert result == []
+
+    def test_search_empty_list(self) -> None:
+        """Поиск в пустом списке → пустой список."""
+        assert process_bank_search([], "test") == []
+
+    def test_search_regex_pattern(self, search_data: List[Dict[str, Any]]) -> None:
+        """Поддержка регулярных выражений."""
+        result = process_bank_search(search_data, r"карт[уы]")
+        assert len(result) == 1
+        assert result[0]["id"] == 2
+
+    def test_search_missing_description(self) -> None:
+        """Транзакция без поля description не вызывает ошибку."""
+        data: List[Dict[str, Any]] = [{"id": 1}, {"id": 2, "description": "Перевод"}]
+        result = process_bank_search(data, "Перевод")
+        assert len(result) == 1
+
+
+# ---------------------------------------------------------------------------
+# Тесты: process_bank_operations
+# ---------------------------------------------------------------------------
+
+
+class TestProcessBankOperations:
+    """Тесты функции process_bank_operations."""
+
+    @pytest.fixture
+    def ops_data(self) -> List[Dict[str, Any]]:
+        return [
+            {"description": "Перевод организации"},
+            {"description": "Перевод организации"},
+            {"description": "Перевод организации"},
+            {"description": "Открытие вклада"},
+            {"description": "Перевод с карты на карту"},
+            {"description": "Перевод с карты на карту"},
+        ]
+
+    def test_count_categories(self, ops_data: List[Dict[str, Any]]) -> None:
+        """Подсчёт по заданным категориям."""
+        categories = ["Перевод организации", "Открытие вклада", "Перевод с карты на карту"]
+        result = process_bank_operations(ops_data, categories)
+        assert result == {
+            "Перевод организации": 3,
+            "Открытие вклада": 1,
+            "Перевод с карты на карту": 2,
+        }
+
+    def test_missing_category_returns_zero(self, ops_data: List[Dict[str, Any]]) -> None:
+        """Категория, которой нет в данных, получает 0."""
+        result = process_bank_operations(ops_data, ["Несуществующая"])
+        assert result == {"Несуществующая": 0}
+
+    def test_empty_data(self) -> None:
+        """Пустой список данных → все категории по 0."""
+        result = process_bank_operations([], ["Перевод организации"])
+        assert result == {"Перевод организации": 0}
+
+    def test_empty_categories(self, ops_data: List[Dict[str, Any]]) -> None:
+        """Пустой список категорий → пустой словарь."""
+        result = process_bank_operations(ops_data, [])
+        assert result == {}
+
+    def test_returns_dict(self, ops_data: List[Dict[str, Any]]) -> None:
+        """Результат — словарь."""
+        result = process_bank_operations(ops_data, ["Открытие вклада"])
+        assert isinstance(result, dict)
+
+    def test_partial_categories(self, ops_data: List[Dict[str, Any]]) -> None:
+        """Подсчёт только указанных категорий, остальные игнорируются."""
+        result = process_bank_operations(ops_data, ["Открытие вклада"])
+        assert result == {"Открытие вклада": 1}
+        assert "Перевод организации" not in result

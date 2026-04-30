@@ -1,132 +1,193 @@
-﻿"""Точка входа проекта — демонстрация маскирования банковских реквизитов."""
+"""Главный модуль проекта — интерактивная работа с банковскими транзакциями."""
 
-from src.masks import get_mask_account
-from src.masks import get_mask_card_number
+import math
+from typing import Any
+from typing import Dict
+from typing import List
+
+from src.processing import filter_by_state
+from src.processing import process_bank_search
+from src.processing import sort_by_date
+from src.readers import read_transactions_csv
+from src.readers import read_transactions_xlsx
+from src.utils import read_transactions_json
 from src.widget import get_date
 from src.widget import mask_account_card
-from src.processing import filter_by_state, sort_by_date
+
+VALID_STATUSES = ("EXECUTED", "CANCELED", "PENDING")
+
+
+def _get_amount(txn: Dict[str, Any]) -> str:
+    """Извлекает сумму из транзакции (JSON или CSV/XLSX формат)."""
+    if "operationAmount" in txn:
+        return str(txn["operationAmount"]["amount"])
+    return str(txn.get("amount", "0"))
+
+
+def _get_currency_code(txn: Dict[str, Any]) -> str:
+    """Извлекает код валюты из транзакции (JSON или CSV/XLSX формат)."""
+    if "operationAmount" in txn:
+        return str(txn["operationAmount"]["currency"]["code"])
+    return str(txn.get("currency_code", ""))
+
+
+def _get_currency_display(txn: Dict[str, Any]) -> str:
+    """Возвращает отображаемое название валюты."""
+    code = _get_currency_code(txn)
+    if code == "RUB":
+        return "руб."
+    return code
+
+
+def _format_date(txn: Dict[str, Any]) -> str:
+    """Форматирует дату транзакции в ДД.ММ.ГГГГ."""
+    date_str = str(txn.get("date", ""))
+    if date_str.endswith("Z"):
+        date_str = date_str[:-1]
+    # Дополняем дату микросекундами, если их нет
+    if "." not in date_str and "T" in date_str:
+        date_str += ".000000"
+    return get_date(date_str)
+
+
+def _is_empty(value: Any) -> bool:
+    """Проверяет, является ли значение пустым (None, NaN, пустая строка)."""
+    if value is None:
+        return True
+    if isinstance(value, float) and math.isnan(value):
+        return True
+    if isinstance(value, str) and not value.strip():
+        return True
+    return False
+
+
+def _print_transaction(txn: Dict[str, Any]) -> None:
+    """Выводит одну транзакцию в формате задания."""
+    date = _format_date(txn)
+    description = txn.get("description", "")
+    print(f"\n{date} {description}")
+
+    from_field = txn.get("from")
+    to_field = txn.get("to")
+
+    if not _is_empty(from_field) and not _is_empty(to_field):
+        print(f"{mask_account_card(str(from_field))} -> {mask_account_card(str(to_field))}")
+    elif not _is_empty(to_field):
+        print(mask_account_card(str(to_field)))
+    elif not _is_empty(from_field):
+        print(mask_account_card(str(from_field)))
+
+    amount = _get_amount(txn)
+    currency = _get_currency_display(txn)
+    print(f"Сумма: {amount} {currency}")
+
+
+def _ask_yes_no(prompt: str) -> bool:
+    """Спрашивает да/нет у пользователя."""
+    answer = input(prompt).strip().lower()
+    return answer in ("да", "yes", "y", "д")
+
+
+def _filter_rub_only(transactions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Фильтрует только рублёвые транзакции."""
+    return [txn for txn in transactions if _get_currency_code(txn) == "RUB"]
+
+
+def _normalize_dates(transactions: List[Dict[str, Any]]) -> None:
+    """Нормализует даты CSV/XLSX для совместимости с sort_by_date."""
+    for txn in transactions:
+        date_str = str(txn.get("date", ""))
+        if date_str.endswith("Z"):
+            txn["date"] = date_str[:-1] + ".000000"
+        elif "T" in date_str and "." not in date_str:
+            txn["date"] = date_str + ".000000"
+
+
+def _choose_source() -> List[Dict[str, Any]]:
+    """Запрашивает у пользователя источник данных и загружает транзакции."""
+    print("Привет! Добро пожаловать в программу работы с банковскими транзакциями.")
+    print("Выберите необходимый пункт меню:")
+    print("1. Получить информацию о транзакциях из JSON-файла")
+    print("2. Получить информацию о транзакциях из CSV-файла")
+    print("3. Получить информацию о транзакциях из XLSX-файла")
+
+    loaders: Dict[str, tuple[str, str]] = {
+        "1": ("JSON", "data/operations.json"),
+        "2": ("CSV", "data/transactions.csv"),
+        "3": ("XLSX", "data/transactions_excel.xlsx"),
+    }
+    readers = {
+        "1": read_transactions_json,
+        "2": read_transactions_csv,
+        "3": read_transactions_xlsx,
+    }
+
+    while True:
+        choice = input("\nПользователь: ").strip()
+        if choice in loaders:
+            name, path = loaders[choice]
+            transactions: List[Dict[str, Any]] = readers[choice](path)
+            print(f"\nДля обработки выбран {name}-файл.")
+            return transactions
+        print("Некорректный ввод. Пожалуйста, выберите 1, 2 или 3.")
+
+
+def _choose_status(transactions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Запрашивает статус фильтрации и применяет фильтр."""
+    while True:
+        print("\nВведите статус, по которому необходимо выполнить фильтрацию.")
+        print("Доступные для фильтровки статусы: EXECUTED, CANCELED, PENDING")
+        status_input = input("\nПользователь: ").strip().upper()
+        if status_input in VALID_STATUSES:
+            filtered = filter_by_state(transactions, status_input)
+            print(f'\nОперации отфильтрованы по статусу "{status_input}"')
+            return filtered
+        print(f'\nСтатус операции "{status_input}" недоступен.')
+
+
+def _apply_filters(transactions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Применяет опциональные фильтры: сортировка, валюта, поиск."""
+    # Сортировка по дате
+    if _ask_yes_no("\nОтсортировать операции по дате? Да/Нет\n\nПользователь: "):
+        sort_input = input(
+            "\nОтсортировать по возрастанию или по убыванию?\n\nПользователь: "
+        ).strip().lower()
+        descending = sort_input != "по возрастанию"
+        _normalize_dates(transactions)
+        transactions = sort_by_date(transactions, descending=descending)
+
+    # Фильтрация только рублёвые
+    if _ask_yes_no("\nВыводить только рублевые транзакции? Да/Нет\n\nПользователь: "):
+        transactions = _filter_rub_only(transactions)
+
+    # Поиск по описанию
+    if _ask_yes_no(
+        "\nОтфильтровать список транзакций по определенному слову в описании? Да/Нет\n\nПользователь: "
+    ):
+        search_query = input("\nВведите строку для поиска:\n\nПользователь: ").strip()
+        transactions = process_bank_search(transactions, search_query)
+
+    return transactions
+
+
+def _print_results(transactions: List[Dict[str, Any]]) -> None:
+    """Выводит итоговый список транзакций."""
+    print("\nРаспечатываю итоговый список транзакций...\n")
+    if not transactions:
+        print("Не найдено ни одной транзакции, подходящей под ваши условия фильтрации")
+    else:
+        print(f"Всего банковских операций в выборке: {len(transactions)}")
+        for txn in transactions:
+            _print_transaction(txn)
 
 
 def main() -> None:
-    """Запускает демонстрацию функций маскирования."""
+    """Основная функция программы — интерактивный интерфейс."""
+    transactions = _choose_source()
+    transactions = _choose_status(transactions)
+    transactions = _apply_filters(transactions)
+    _print_results(transactions)
 
-    card_examples_str = [
-        "7000792289606361",
-        "1596837868705199",
-    ]
-    card_examples_int = [
-        6831982476737658,
-    ]
-
-    account_examples_str = [
-        "73654108430135874305",
-    ]
-    account_examples_int = [
-        35383033474447895560,
-    ]
-
-    print("=" * 40)
-    print("  Маскирование номеров карт (str)")
-    print("=" * 40)
-    for card in card_examples_str:
-        print(f"  {card}  →  {get_mask_card_number(card)}")
-
-    print()
-    print("=" * 40)
-    print("  Маскирование номеров карт (int)")
-    print("=" * 40)
-    for card in card_examples_int:
-        print(f"  {card}  →  {get_mask_card_number(card)}")
-
-    print()
-    print("=" * 40)
-    print("  Маскирование номеров счетов (str)")
-    print("=" * 40)
-    for account in account_examples_str:
-        print(f"  {account}  →  {get_mask_account(account)}")
-
-    print()
-    print("=" * 40)
-    print("  Маскирование номеров счетов (int)")
-    print("=" * 40)
-    for account in account_examples_int:
-        print(f"  {account}  →  {get_mask_account(account)}")
-
-    print()
-    print("=" * 40)
-    print("  mask_account_card")
-    print("=" * 40)
-    widget_examples = [
-        "Maestro 1596837868705199",
-        "Счет 64686473678894779589",
-        "MasterCard 7158300734726758",
-        "Счет 35383033474447895560",
-        "Visa Classic 6831982476737658",
-        "Visa Platinum 8990922113665229",
-        "Visa Gold 5999414228426353",
-        "Счет 73654108430135874305",
-    ]
-    for entry in widget_examples:
-        print(f"  {entry}  →  {mask_account_card(entry)}")
-
-    print()
-    print("=" * 40)
-    print("  get_date")
-    print("=" * 40)
-    date_examples = [
-        "2024-03-11T02:26:18.671407",
-        "2025-12-01T15:00:00.000000",
-        "2000-01-09T00:00:00.000000",
-    ]
-    for date_str in date_examples:
-        print(f"  {date_str}  →  {get_date(date_str)}")
-
-    data = [
-        {'id': 41428829, 'state': 'EXECUTED', 'date': '2019-07-03T18:35:29.512364'},
-        {'id': 939719570, 'state': 'EXECUTED', 'date': '2018-06-30T02:08:58.425572'},
-        {'id': 594226727, 'state': 'CANCELED', 'date': '2018-09-12T21:27:25.241689'},
-        {'id': 615064591, 'state': 'CANCELED', 'date': '2018-10-14T08:21:33.419441'}
-    ]
-
-    # Фильтрация по статусу EXECUTED
-    executed = filter_by_state(data)  # по умолчанию 'EXECUTED'
-    print(executed)
-    # Ожидаем:
-    # [
-    #   {'id': 41428829, 'state': 'EXECUTED', 'date': '2019-07-03T18:35:29.512364'},
-    #   {'id': 939719570, 'state': 'EXECUTED', 'date': '2018-06-30T02:08:58.425572'}
-    # ]
-
-    # Фильтрация по статусу CANCELED
-    canceled = filter_by_state(data, 'CANCELED')
-    print(canceled)
-    # Ожидаем:
-    # [
-    #   {'id': 594226727, 'state': 'CANCELED', 'date': '2018-09-12T21:27:25.241689'},
-    #   {'id': 615064591, 'state': 'CANCELED', 'date': '2018-10-14T08:21:33.419441'}
-    # ]
-
-    # Сортировка по убыванию (descending=True)
-    sorted_desc = sort_by_date(data)  # по умолчанию True
-    print(sorted_desc)
-    # Ожидаем:
-    # [
-    #   {'id': 41428829, 'state': 'EXECUTED', 'date': '2019-07-03T18:35:29.512364'},
-    #   {'id': 615064591, 'state': 'CANCELED', 'date': '2018-10-14T08:21:33.419441'},
-    #   {'id': 594226727, 'state': 'CANCELED', 'date': '2018-09-12T21:27:25.241689'},
-    #   {'id': 939719570, 'state': 'EXECUTED', 'date': '2018-06-30T02:08:58.425572'}
-    # ]
-
-    # Сортировка по возрастанию (descending=False)
-    sorted_asc = sort_by_date(data, descending=False)
-    print(sorted_asc)
-    # Ожидаем:
-    # [
-    #   {'id': 939719570, 'state': 'EXECUTED', 'date': '2018-06-30T02:08:58.425572'},
-    #   {'id': 594226727, 'state': 'CANCELED', 'date': '2018-09-12T21:27:25.241689'},
-    #   {'id': 615064591, 'state': 'CANCELED', 'date': '2018-10-14T08:21:33.419441'},
-    #   {'id': 41428829, 'state': 'EXECUTED', 'date': '2019-07-03T18:35:29.512364'}
-    # ]
 
 if __name__ == "__main__":
     main()
