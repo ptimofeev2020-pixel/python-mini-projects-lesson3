@@ -1,9 +1,10 @@
-
 """
 Модуль для обработки банковских операций.
 Содержит функции для фильтрации и сортировки операций по различным критериям.
 """
 
+import re
+from collections import Counter
 from datetime import datetime
 from typing import Any
 from typing import Dict
@@ -47,3 +48,56 @@ def sort_by_date(operations: List[Dict[str, Any]], descending: bool = True) -> L
         return datetime.strptime(op["date"], date_format)
 
     return sorted(operations, key=_parse_date, reverse=descending)
+
+
+def process_bank_search(data: List[Dict[str, Any]], search: str) -> List[Dict[str, Any]]:
+    """Ищет транзакции, в описании которых встречается заданная строка.
+
+    Поиск выполняется по полю ``description`` с использованием
+    регулярных выражений (``re``). Поиск регистронезависимый.
+
+    Args:
+        data: Список словарей-транзакций.
+        search: Строка поиска (подстрока или регулярное выражение).
+
+    Returns:
+        Список транзакций, описание которых содержит совпадение.
+
+    Example:
+        >>> ops = [
+        ...     {"description": "Перевод организации"},
+        ...     {"description": "Открытие вклада"},
+        ... ]
+        >>> process_bank_search(ops, "перевод")
+        [{'description': 'Перевод организации'}]
+    """
+    pattern = re.compile(search, re.IGNORECASE)
+    return [op for op in data if pattern.search(op.get("description", ""))]
+
+
+def process_bank_operations(data: List[Dict[str, Any]], categories: List[str]) -> Dict[str, int]:
+    """Подсчитывает количество операций по категориям.
+
+    Категории определяются по значению поля ``description``.
+    Используется ``Counter`` из модуля ``collections``.
+
+    Args:
+        data: Список словарей-транзакций.
+        categories: Список названий категорий для подсчёта.
+
+    Returns:
+        Словарь, где ключи — названия категорий,
+        значения — количество операций в каждой категории.
+        Категории, не встречающиеся в данных, получают значение 0.
+
+    Example:
+        >>> ops = [
+        ...     {"description": "Перевод организации"},
+        ...     {"description": "Перевод организации"},
+        ...     {"description": "Открытие вклада"},
+        ... ]
+        >>> process_bank_operations(ops, ["Перевод организации", "Открытие вклада"])
+        {'Перевод организации': 2, 'Открытие вклада': 1}
+    """
+    counter: Counter[str] = Counter(op.get("description", "") for op in data)
+    return {cat: counter.get(cat, 0) for cat in categories}
